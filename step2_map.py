@@ -17,4 +17,4 @@ ox.save_graphml(graph, "koramangala.graphml")
 # Draw the map and save it as a picture
 fig, ax = ox.plot_graph(graph, node_size=4, edge_linewidth=0.8, show=False, close=False)
 plt.savefig("koramangala_map.png", dpi=150)
-print("Saved koramangala_map.png")
+print("Saved koramangala_map.png") 
