@@ -56,7 +56,7 @@ def flood_depths(susc, rain_mm_hr, drainage_mm_hr=20.0, boost=None):
     out = {}
     for n, s in susc.items():
         excess = max(0.0, rain_mm_hr - drainage_mm_hr - boost.get(n, 0.0))
-        out[n] = excess * (0.05 + 0.35 * s)
+        out[n] = excess * (0.02 + 0.45 * s ** 1.7)
     return out
 
 
