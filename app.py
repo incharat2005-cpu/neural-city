@@ -31,7 +31,7 @@ def setup():
 
 g, susc, origin, dest, roads = setup()
 
-DEFAULTS = {"rain": 80, "drain": 20, "hour": 18, "extra": 0, "closed": []}
+DEFAULTS = {"rain": 80, "drain": 20, "hour": 18, "extra": 0, "closed": [], "blocked": False}
 for k, v in DEFAULTS.items():
     st.session_state.setdefault(k, v)
 
@@ -64,9 +64,10 @@ drain = st.sidebar.slider("Drainage capacity (mm/hr)", 5, 60, key="drain")
 hour = st.sidebar.slider("Hour of day", 0, 23, key="hour")
 extra = st.sidebar.slider("What-if: extra drainage in the worst flood spots (mm/hr)", 0, 40, key="extra")
 closed = st.sidebar.multiselect("What-if: close roads", list(roads), key="closed")
+blocked_drains = st.sidebar.checkbox("IoT alert: drains blocked at the worst flood spots", key="blocked")
 
 threshold = np.quantile(list(susc.values()), 0.9)
-boost = {n: extra for n, s in susc.items() if s >= threshold}
+boost = {n: extra - (15 if blocked_drains else 0) for n, s in susc.items() if s >= threshold}
 depths = flood_depths(susc, rain, drain, boost)
 blocked = [p for name in closed for p in roads[name]]
 blocked_set = {frozenset(p) for p in blocked}
@@ -257,3 +258,59 @@ with tab2:
     if st.session_state.get("storm_rerun"):
        st.session_state["storm_rerun"] = False
        st.rerun()
+
+# ---------- Live sensor feed (simulated real-time stream) ----------
+st.subheader("Live sensor feed (simulated real-time stream)")
+live_on = st.toggle("Start live feed", value=False)
+
+LIVE_SENSORS = {
+    "pressure": ("Water pipe pressure (bar)", "Dispatch water-board crew: possible pipe leak"),
+    "power": ("Transformer load (kW)", "Alert electricity utility: transformer overload"),
+    "drain": ("Drain water level (cm)", "Clear drain and deploy pump: possible blockage"),
+}
+
+
+def robust_z(series):
+    """How unusual is the newest reading compared with the last 30?"""
+    if len(series) < 15:
+        return 0.0
+    hist = np.array(series[:-1][-30:])
+    med = np.median(hist)
+    mad = np.median(np.abs(hist - med)) * 1.4826 + 1e-6
+    return float((series[-1] - med) / mad)
+
+
+@st.fragment(run_every=1 if live_on else None)
+def live_feed():
+    s = st.session_state.setdefault("live", {"tick": 0, "pressure": [], "power": [], "drain": []})
+    s["tick"] += 1
+    k = s["tick"] % 90
+    r = np.random.default_rng(s["tick"])
+    new = {
+        "pressure": 3.5 + r.normal(0, 0.05) - (1.2 if 30 <= k < 42 else 0),    # pipe leak
+        "drain": 5 + r.normal(0, 0.8) + (30 if 60 <= k < 72 else 0),           # drain blockage
+        "power": 420 + r.normal(0, 8) + (230 if 80 <= k < 88 else 0),          # transformer overload
+    }
+    for key, val in new.items():
+        s[key].append(val)
+        s[key] = s[key][-60:]
+
+    cols = st.columns(3)
+    alerts = []
+    for col, (key, (label, action)) in zip(cols, LIVE_SENSORS.items()):
+        z = robust_z(s[key])
+        flagged = abs(z) > 5
+        col.metric(label, f"{s[key][-1]:.2f}", "ALERT" if flagged else "normal",
+                   delta_color="inverse" if flagged else "off")
+        col.line_chart(pd.DataFrame({label: s[key]}), height=160)
+        if flagged:
+            alerts.append(f"{label}: {action}")
+    for a in alerts:
+        st.error("ALERT: " + a)
+    if not alerts:
+        st.success("All sensors normal")
+    st.caption(f"Reading #{s['tick']}. Simulated sensors with faults injected on a schedule; "
+               "detection compares each new reading with the last 30 (robust z-score).")
+
+
+live_feed()
