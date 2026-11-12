@@ -111,3 +111,71 @@ st.caption("Red = flooded, purple = closed, orange/yellow = slow, green = free f
            "cyan = ambulance route (green dot = start, white dot = hospital), "
            "red columns = flood depth in 3D. "
            "Rainfall and traffic are simulated; terrain is SRTM 90 m data.")
+
+# ---------- Mayor mode: where to send pumps ----------
+from scipy.spatial import cKDTree
+from flood import _xy_metres
+from traffic import road_class, BASE_LOAD, demand
+
+st.subheader("Mayor mode: where to send pumps")
+pumps = st.slider("Mobile pumps available", 0, 10, 4)
+
+node_list = list(g.nodes)
+idx = {n: i for i, n in enumerate(node_list)}
+xy = _xy_metres(g, node_list)
+tree = cKDTree(xy)
+
+load_sum, load_cnt = {}, {}
+for u, v, d in g.edges(data=True):
+    b = BASE_LOAD.get(road_class(d), 0.3)
+    for n in (u, v):
+        load_sum[n] = load_sum.get(n, 0) + b
+        load_cnt[n] = load_cnt.get(n, 0) + 1
+traffic_load = {n: load_sum[n] / load_cnt[n] * demand(hour) for n in load_sum}
+
+
+def road_label(n):
+    for _, _, d in list(g.edges(n, data=True)) + list(g.in_edges(n, data=True)):
+        name = d.get("name")
+        if isinstance(name, str) and not name.startswith("["):
+            return name
+    return "unnamed road"
+
+
+priority = {n: depths[n] * (1 + traffic_load.get(n, 0.3)) for n in node_list if depths[n] >= 15}
+chosen = []
+for n in sorted(priority, key=priority.get, reverse=True):
+    if len(chosen) >= pumps:
+        break
+    if all(np.linalg.norm(xy[idx[n]] - xy[idx[c]]) > 200 for c in chosen):
+        chosen.append(n)
+
+if not priority:
+    st.info("No flooded intersections in this scenario, so no pumps are needed.")
+elif not chosen:
+    st.info("Set at least one pump to see suggestions.")
+else:
+    pump_boost = dict(boost)
+    for c in chosen:
+        for j in tree.query_ball_point(xy[idx[c]], 200):
+            pump_boost[node_list[j]] = pump_boost.get(node_list[j], 0) + 30
+    depths_after = flood_depths(susc, rain, drain, pump_boost)
+    before = sum(1 for u, v, k in g.edges(keys=True) if edge_depth(depths, u, v) >= 15)
+    after = sum(1 for u, v, k in g.edges(keys=True) if edge_depth(depths_after, u, v) >= 15)
+
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Flooded roads without pumps", before)
+    m2.metric("Flooded roads with pumps", after, f"{after - before}", delta_color="inverse")
+    m3.metric("Pumps placed", len(chosen))
+
+    table = pd.DataFrame([{
+        "Rank": i + 1,
+        "Near road": road_label(n),
+        "Water depth (cm)": round(depths[n], 1),
+        "Traffic load": round(traffic_load.get(n, 0.3), 2),
+        "Action": "Deploy pump + divert traffic" if traffic_load.get(n, 0.3) > 0.5 else "Deploy pump",
+    } for i, n in enumerate(chosen)])
+    st.dataframe(table, hide_index=True, use_container_width=True)
+    st.caption("Priority = water depth x traffic load, with pumps at least 200 m apart. "
+               "Simple model: each pump adds 30 mm/hr of drainage within 200 m.")
+    
