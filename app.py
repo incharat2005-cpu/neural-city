@@ -96,8 +96,18 @@ points = pd.DataFrame([{"lon": ORIGIN[1], "lat": ORIGIN[0], "c": [0, 255, 0]},
 layers.append(pdk.Layer("ScatterplotLayer", points, get_position="[lon, lat]",
                         get_fill_color="c", get_radius=60))
 
-view = pdk.ViewState(latitude=12.9352, longitude=77.6245, zoom=14.5, pitch=35)
+flood_cols = pd.DataFrame([
+    {"lon": g.nodes[n]["x"], "lat": g.nodes[n]["y"], "depth": float(dep)}
+    for n, dep in depths.items() if dep >= 15
+])
+if len(flood_cols) > 0:
+    layers.append(pdk.Layer("ColumnLayer", flood_cols, get_position="[lon, lat]",
+                            get_elevation="depth", elevation_scale=4, radius=18,
+                            get_fill_color=[230, 57, 70, 210], extruded=True))
+
+view = pdk.ViewState(latitude=12.9352, longitude=77.6245, zoom=14.5, pitch=55)
 st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view, map_style="dark"))
 st.caption("Red = flooded, purple = closed, orange/yellow = slow, green = free flow, "
-           "cyan = ambulance route (green dot = start, white dot = hospital). "
+           "cyan = ambulance route (green dot = start, white dot = hospital), "
+           "red columns = flood depth in 3D. "
            "Rainfall and traffic are simulated; terrain is SRTM 90 m data.")
