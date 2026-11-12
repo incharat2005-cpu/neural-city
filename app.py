@@ -96,7 +96,7 @@ points = pd.DataFrame([{"lon": ORIGIN[1], "lat": ORIGIN[0], "c": [0, 255, 0]},
 layers.append(pdk.Layer("ScatterplotLayer", points, get_position="[lon, lat]",
                         get_fill_color="c", get_radius=60))
 
-view = pdk.ViewState(latitude=12.9352, longitude=77.6245, zoom=13.3, pitch=35)
+view = pdk.ViewState(latitude=12.9352, longitude=77.6245, zoom=14.5, pitch=35)
 st.pydeck_chart(pdk.Deck(layers=layers, initial_view_state=view, map_style="dark"))
 st.caption("Red = flooded, purple = closed, orange/yellow = slow, green = free flow, "
            "cyan = ambulance route (green dot = start, white dot = hospital). "
