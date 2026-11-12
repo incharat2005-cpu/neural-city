@@ -67,6 +67,6 @@ Map and terrain data are included (koramangala_elev.graphml). To rebuild them: r
 
 ## HACK ELITE 
 
-INCHARA T 
-DIVYA S 
+INCHARA T,
+DIVYA S ,
 INCHARA PATEL J P
