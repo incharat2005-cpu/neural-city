@@ -1,3 +1,4 @@
+import time 
 import numpy as np
 import osmnx as ox
 import pandas as pd
@@ -40,9 +41,24 @@ def reset():
         st.session_state[k] = v
 
 
+def start_storm():
+    st.session_state["storm"] = True
+    st.session_state["rain"] = 0
+
+
+if st.session_state.get("storm"):
+    if st.session_state["rain"] < 120:
+        time.sleep(0.3)
+        st.session_state["rain"] = min(120, st.session_state["rain"] + 10)
+        st.session_state["storm_rerun"] = True
+    else:
+        st.session_state["storm"] = False
+
+
 st.title("NEURAL CITY: Koramangala urban digital twin")
 st.sidebar.header("Scenario controls")
 st.sidebar.button("Reset demo", on_click=reset)
+st.sidebar.button("Play rain storm", on_click=start_storm)
 rain = st.sidebar.slider("Rainfall (mm/hr)", 0, 150, key="rain")
 drain = st.sidebar.slider("Drainage capacity (mm/hr)", 5, 60, key="drain")
 hour = st.sidebar.slider("Hour of day", 0, 23, key="hour")
@@ -238,4 +254,6 @@ with tab2:
     st.caption("Simulated sensors (pipe pressure, transformer load, drain water level) with injected faults. "
                "Isolation Forest flags anomalies, and an alert is raised only when 3 or more flagged "
                "readings occur in a row, which filters out most false alarms.")
-    
+    if st.session_state.get("storm_rerun"):
+       st.session_state["storm_rerun"] = False
+       st.rerun()
