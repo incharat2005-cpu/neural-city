@@ -178,4 +178,64 @@ else:
     st.dataframe(table, hide_index=True, use_container_width=True)
     st.caption("Priority = water depth x traffic load, with pumps at least 200 m apart. "
                "Simple model: each pump adds 30 mm/hr of drainage within 200 m.")
+
+    # ---------- AI insights ----------
+from sklearn.ensemble import IsolationForest
+
+st.subheader("AI insights")
+tab1, tab2 = st.tabs(["Traffic forecast (graph neural network)",
+                      "Infrastructure alerts (IoT anomaly detection)"])
+
+with tab1:
+    st.image("gnn_results.png")
+    st.dataframe(pd.DataFrame({
+        "Method": ["Persistence (no learning)", "Ridge regression (no graph)", "Graph neural network (GCN)"],
+        "RMSE": [0.0391, 0.0374, 0.0315],
+        "MAE": [0.0281, 0.0266, 0.0220],
+    }), hide_index=True, use_container_width=True)
+    st.caption("30-minute-ahead congestion forecast on unseen time. The graph neural network is 15.7% "
+               "better than the best baseline. Trained on simulated traffic with spillover between "
+               "neighbouring roads, so it shows the method works, not accuracy on real Bengaluru traffic.")
+
+SENSORS = {
+    "pipe_pressure_bar": ("Water pipe pressure", "Dispatch water-board crew: possible pipe leak"),
+    "power_load_kw": ("Transformer load", "Alert electricity utility: transformer overload"),
+    "drain_water_cm": ("Drain water level", "Clear drain and deploy pump: possible blockage"),
+}
+
+
+@st.cache_data
+def sensor_alerts():
+    data = pd.read_csv("sensor_data.csv", parse_dates=["time"])
+    times = data["time"].tolist()
+    rows = []
+    for col, (label, action) in SENSORS.items():
+        s = data[col]
+        feats = pd.DataFrame({"value": s, "delta": s.diff().fillna(0),
+                              "dev": s - s.rolling(24, min_periods=1).median()})
+        flags = IsolationForest(contamination=0.10, random_state=0).fit_predict(feats) == -1
+        start = None
+        for i, f in enumerate(list(flags) + [False]):
+            if f and start is None:
+                start = i
+            if not f and start is not None:
+                if i - start >= 3:              # alert only on 3+ anomalies in a row
+                    rows.append({"Sensor": label,
+                                 "Alert from": times[start].strftime("%H:%M"),
+                                 "Alert until": times[i - 1].strftime("%H:%M"),
+                                 "Suggested action": action})
+                start = None
+    return pd.DataFrame(rows)
+
+
+with tab2:
+    alerts = sensor_alerts()
+    if len(alerts) == 0:
+        st.info("No alerts.")
+    else:
+        st.dataframe(alerts, hide_index=True, use_container_width=True)
+    st.image("sensor_anomalies.png")
+    st.caption("Simulated sensors (pipe pressure, transformer load, drain water level) with injected faults. "
+               "Isolation Forest flags anomalies, and an alert is raised only when 3 or more flagged "
+               "readings occur in a row, which filters out most false alarms.")
     
