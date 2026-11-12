@@ -20,7 +20,7 @@ power[210:220] *= 1.55                            # transformer overload
 water[100:130] += np.linspace(0, 40, 30)          # drain gets blocked
 
 
-def detect(values, contamination=0.06):
+def detect(values, contamination=0.10):
     s = pd.Series(values)
     feats = pd.DataFrame({
         "value": s,
